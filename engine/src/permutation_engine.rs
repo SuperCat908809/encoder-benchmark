@@ -8,7 +8,7 @@ use crossbeam_channel::Receiver;
 use ctrlc::Error;
 
 use ffmpeg::args::FfmpegArgs;
-use ffmpeg::report_files::{extract_vmaf_score, get_latest_ffmpeg_report_file, read_last_line_at};
+use ffmpeg::report_files::{extract_vmaf_score, get_latest_ffmpeg_report_file, read_last_line_at, find_and_extract_vmaf_score};
 use permutation::permutation::Permutation;
 
 use crate::engine::{log_permutation_header, run_encode, spawn_ffmpeg_child};
@@ -224,26 +224,16 @@ fn calc_vmaf_score(
     println!("VMAF calculation finishing up...");
     let vmaf_child_status = vmaf_child.wait().expect("Vmaf child could not wait");
     let vmaf_log_file = get_latest_ffmpeg_report_file();
-    // TODO: this does fix the issue for apple however, this may not scale very well across other vendors
-    // or the output line number may have changed recently where we'll need to make this not dependent on line numbers at all
-    let line_number = if encoder_args.encoder.contains("videotoolbox") {
-        15
-    } else {
-        3
-    };
-    let vmaf_score_line = read_last_line_at(line_number);
+
     //Cleanup process
     encoder_child
         .kill()
         .expect("Could not kill encoder process");
 
-    if vmaf_child_status.success() {
-        let vmaf_score_extract = extract_vmaf_score(vmaf_score_line.as_str());
-        let vmaf_score = vmaf_score_extract.expect(&format!(
-            "Could not parse score from line: {}",
-            vmaf_score_line
-        ));
+    if vmaf_child_status.success() {    
+        let vmaf_score = find_and_extract_vmaf_score().expect("Could not parse score from ffmpeg vmaf log");
         println!("VMAF score: {}\n", vmaf_score);
+
         // Cleanup log file
         remove_file(vmaf_log_file.as_path()).unwrap();
         return Some(vmaf_score);

@@ -32,6 +32,25 @@ pub fn read_last_line_at(line_number: i32) -> String {
     return lines.next().unwrap().unwrap();
 }
 
+pub fn find_and_extract_vmaf_score() -> Result<c_float, &'static str> {
+    let log_file = File::open(get_latest_ffmpeg_report_file()).unwrap();
+    let reader = RevBufReader::new(log_file);
+    let lines = reader.lines();
+
+    // read from bottom until VMAF score is found
+    for candidate_line in lines {
+        let unwrapped_line = candidate_line.unwrap();
+        let vmaf_candidate = extract_vmaf_score(&unwrapped_line.as_str());
+        match vmaf_candidate {
+            Ok(vmaf_score) => return Ok(vmaf_score),
+            Err(_) => continue,
+        }
+    }
+
+    // if VMAF score could not be found, return error
+    Err("Could not find VMAF score")
+}
+
 pub fn capture_group(str: &str, regex: &str) -> String {
     let re = Regex::new(regex).unwrap();
     let caps = re.captures(str);
