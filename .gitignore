@@ -31,3 +31,6 @@ tmp.flf
 
 # ignore tmp files created from unit tests
 ffmpeg/*log*
+
+# ignore Visual Studio Code configuration files
+.vscode/
