@@ -5,6 +5,7 @@ use std::io::Write;
 use compound_duration::format_dhms;
 
 use ffmpeg::metadata::MetaData;
+use ffmpeg::args::FfmpegQuality;
 
 use crate::fps_stats::FpsStats;
 
@@ -12,7 +13,8 @@ use crate::fps_stats::FpsStats;
 pub struct PermutationResult {
     pub encoder: String,
     pub was_overloaded: bool,
-    bitrate: u32,
+    //bitrate: u32,
+    quality: FfmpegQuality,
     metadata: MetaData,
     pub encoder_settings: String,
     // only if the encodes were successful
@@ -26,7 +28,8 @@ pub struct PermutationResult {
 impl PermutationResult {
     pub fn new(
         metadata: &MetaData,
-        bitrate: u32,
+        //bitrate: u32,
+        quality: FfmpegQuality,
         encoder_settings: &String,
         encoder: &str,
         decode: bool,
@@ -34,7 +37,7 @@ impl PermutationResult {
         Self {
             encoder: String::from(encoder),
             was_overloaded: false,
-            bitrate,
+            quality,
             metadata: metadata.clone(),
             encoder_settings: encoder_settings.to_string(),
             encode_time: 0,
@@ -50,14 +53,26 @@ impl PermutationResult {
 
         let overloaded_indicator = if self.was_overloaded { "[O]" } else { "   " };
         default.push_str(
-            format!(
-                "{}{}x{}\t{}\t{}Mb/s",
-                overloaded_indicator,
-                self.metadata.width,
-                self.metadata.height,
-                self.metadata.fps,
-                self.bitrate
-            )
+            match self.quality {
+                FfmpegQuality::ConstantBitrate(bitrate) =>
+                    format!(
+                        "{}{}x{}\t{}\t{}Mb/s",
+                        overloaded_indicator,
+                        self.metadata.width,
+                        self.metadata.height,
+                        self.metadata.fps,
+                        bitrate,
+                    ),
+                FfmpegQuality::ConstantQuality(quality) =>
+                    format!(
+                        "{}{}x{}\t{}\t{}CQ",
+                        overloaded_indicator,
+                        self.metadata.width,
+                        self.metadata.height,
+                        self.metadata.fps,
+                        quality,
+                    ),
+        }
             .as_str(),
         );
 
@@ -99,7 +114,8 @@ pub fn log_results_to_file(
     results: Vec<PermutationResult>,
     runtime_str: &String,
     dup_results: Vec<PermutationResult>,
-    bitrate: u32,
+    //bitrate: u32,
+    quality: FfmpegQuality,
     is_benchmark: bool,
     log_directory: &String,
 ) {
@@ -135,13 +151,16 @@ pub fn log_results_to_file(
     }
 
     writeln!(&mut w, "   [Resolution]\t[FPS]\t[Bitrate]\t{}\t[VMAF Time]\t[VMAF Score]\t[Average FPS]\t[1%'ile]\t[90%'ile]\t[Encoder Settings]", time).unwrap();
-    let mut current_bitrate = 0;
+    let mut current_quality = match results.get(0).unwrap().quality {
+        FfmpegQuality::ConstantBitrate(_) => FfmpegQuality::ConstantBitrate(0),
+        FfmpegQuality::ConstantQuality(_) => FfmpegQuality::ConstantQuality(0),
+    };
 
     for result in &results {
         // print a line split between bitrate permutations for improved readability
-        if !is_benchmark && current_bitrate != result.bitrate {
+        if !is_benchmark && current_quality != result.quality {
             writeln!(&mut w, "##################################################################################################################################################################").unwrap();
-            current_bitrate = result.bitrate;
+            current_quality = result.quality.clone();
         }
 
         writeln!(&mut w, "{}", result.to_string()).unwrap();
@@ -154,7 +173,7 @@ pub fn log_results_to_file(
     // log out the duplicated results so we can keep track of them
     let initial_perms: Vec<PermutationResult> = results
         .into_iter()
-        .filter(|res| res.bitrate == bitrate)
+        .filter(|res| res.quality == quality)
         .collect();
 
     // for each of these, collect the duplicates with the same score

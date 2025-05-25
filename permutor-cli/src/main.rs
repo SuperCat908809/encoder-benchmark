@@ -10,6 +10,7 @@ use codecs::permute::Permute;
 use codecs::qsv::QSV;
 use codecs::vendor::Vendor;
 use engine::permutation_engine::PermutationEngine;
+use ffmpeg::args::FfmpegQuality;
 use permutation::permutation::Permutation;
 
 use crate::permutor_cli::PermutorCli;
@@ -23,25 +24,28 @@ fn main() {
 
     log_special_arguments(&cli);
 
+    let cli_quality = cli.fetch_quality_args();
+    let quality_interval = cli.fetch_quality_interval();
+
     let mut engine = PermutationEngine::new(cli.log_output_directory.clone());
     let vendor = get_vendor_for_codec(&cli.encoder.clone());
-    for bitrate in get_bitrate_permutations(cli.bitrate, cli.max_bitrate_permutation.unwrap()) {
+    for quality in get_quality_permutations(cli_quality, cli.max_quality_permutation.unwrap(), quality_interval) {
         match vendor {
             Vendor::Nvidia => {
-                build_nvenc_setting_permutations(&mut engine, &cli, bitrate);
+                build_nvenc_setting_permutations(&mut engine, &cli, quality);
             }
             Vendor::AMD => {
-                build_amf_setting_permutations(&mut engine, &cli, bitrate);
+                panic!(); //build_amf_setting_permutations(&mut engine, &cli, bitrate);
             }
             Vendor::IntelQSV => {
                 if cli.encoder.contains("av1") {
-                    build_intel_av1_permutations(&mut engine, &cli, bitrate);
+                    panic!(); //build_intel_av1_permutations(&mut engine, &cli, bitrate);
                 } else {
-                    build_intel_igpu_permutations(&mut engine, &cli, bitrate);
+                    panic!(); //build_intel_igpu_permutations(&mut engine, &cli, bitrate);
                 }
             }
             Vendor::Apple => {
-                build_apple_silicon_h264_permutations(&mut engine, &cli, bitrate);
+                panic!(); //build_apple_silicon_h264_permutations(&mut engine, &cli, bitrate);
             }
             Vendor::Unknown => {}
         }
@@ -78,7 +82,7 @@ fn log_special_arguments(cli: &PermutorCli) {
 fn build_nvenc_setting_permutations(
     engine: &mut PermutationEngine,
     cli: &PermutorCli,
-    bitrate: u32,
+    quality: FfmpegQuality,
 ) {
     let mut nvenc = Nvenc::new(cli.encoder == "hevc_nvenc", cli.gpu, cli.no_b_frame);
 
@@ -89,7 +93,7 @@ fn build_nvenc_setting_permutations(
         let mut permutation = Permutation::new(cli.source_file.clone(), cli.encoder.clone());
         permutation.video_file = cli.source_file.clone();
         permutation.encoder_settings = settings;
-        permutation.bitrate = bitrate;
+        permutation.quality = quality;
         permutation.check_quality = cli.check_quality;
         permutation.verbose = cli.verbose;
         permutation.detect_overload = cli.detect_overload;
@@ -105,6 +109,7 @@ fn build_nvenc_setting_permutations(
     }
 }
 
+/*
 fn build_amf_setting_permutations(engine: &mut PermutationEngine, cli: &PermutorCli, bitrate: u32) {
     let mut amf = Amf::new(cli.encoder == "hevc_amf", cli.gpu);
 
@@ -212,13 +217,30 @@ fn build_apple_silicon_h264_permutations(
         }
     }
 }
+*/
 
-fn get_bitrate_permutations(starting_bitrate: u32, max_bitrate: u32) -> Vec<u32> {
-    let interval = 5;
-    let mut bitrates = Vec::new();
-    for i in 0..(((max_bitrate - starting_bitrate) / interval) + 1) {
-        bitrates.push(starting_bitrate + (interval * i));
+fn get_quality_permutations(starting_quality: FfmpegQuality, max_quality: u32, interval: i32) -> Vec<FfmpegQuality> {
+
+    let mut qualities = Vec::new();
+    let min: i32;
+    //let interval: i32;
+    match starting_quality {
+        FfmpegQuality::ConstantBitrate(b) => {
+            min = b as i32;
+            //interval = 5;
+        },
+        FfmpegQuality::ConstantQuality(q) => {
+            min  = q as i32;
+            //interval = -4;
+        }, // note interval is negative since quality increases with smaller CQs
     }
 
-    return bitrates;
+    for i in 0..(((max_quality as i32 - min) / interval) + 1) {
+        qualities.push(match starting_quality {
+            FfmpegQuality::ConstantBitrate(_) => FfmpegQuality::ConstantBitrate((min + (interval * i)) as u32),
+            FfmpegQuality::ConstantQuality(_) => FfmpegQuality::ConstantQuality((min + (interval * i)) as u32),
+        });
+    }
+
+    return qualities;
 }

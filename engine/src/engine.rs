@@ -9,7 +9,7 @@ use crossbeam_channel::Receiver;
 use ctrlc::Error;
 
 use cli::cli_util::error_with_ack;
-use ffmpeg::args::FfmpegArgs;
+use ffmpeg::args::{FfmpegArgs, FfmpegQuality};
 use ffmpeg::metadata::MetaData;
 use permutation::permutation::Permutation;
 
@@ -24,7 +24,7 @@ pub fn run_encode(
 ) -> PermutationResult {
     let mut result = PermutationResult::new(
         &p.get_metadata(),
-        p.bitrate,
+        p.quality,
         &p.encoder_settings,
         &p.encoder,
         p.decode_run,
@@ -36,7 +36,7 @@ pub fn run_encode(
         p.video_file,
         p.encoder,
         &p.encoder_settings,
-        p.bitrate,
+        p.quality,
         p.decode_run,
         p.ten_bit,
     );
@@ -143,7 +143,11 @@ fn log_header(
     println!("[Resolution:\t{}x{}]", metadata.width, metadata.height);
     println!("[Encoder:\t{}]", permutation.encoder);
     println!("[FPS:\t\t{}]", metadata.fps);
-    println!("[Bitrate:\t{}Mb/s]", permutation.bitrate);
+    //println!("[Bitrate:\t{}Mb/s]", permutation.quality);
+    match permutation.quality {
+        FfmpegQuality::ConstantBitrate(b) => println!("[Bitrate:\t{}Mb/s]", b),
+        FfmpegQuality::ConstantQuality(q) => println!("[Quality:\t{}]", q),
+    }
     println!("[{}]", permutation.encoder_settings);
 }
 

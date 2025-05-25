@@ -93,7 +93,7 @@ impl PermutationEngine {
             }
 
             let is_initial_bitrate_permutation_over = i == self.permutations.len() - 1
-                || self.permutations[i + 1].clone().bitrate != permutation.bitrate;
+                || self.permutations[i + 1].clone().quality != permutation.quality;
             self.add_result(
                 result,
                 is_initial_bitrate_permutation_over,
@@ -125,7 +125,7 @@ impl PermutationEngine {
             self.results.clone(),
             &runtime_str,
             self.dup_results.clone(),
-            self.permutations[0].bitrate,
+            self.permutations[0].quality.clone(),
             false,
             &self.log_files_directory,
         );
@@ -175,7 +175,7 @@ fn calc_vmaf_score(
         p.video_file.clone(),
         p.encoder.clone(),
         &p.encoder_settings,
-        p.bitrate.clone(),
+        p.quality.clone(),
         p.decode_run,
         p.ten_bit,
     );

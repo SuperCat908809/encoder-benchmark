@@ -2,14 +2,19 @@ use clap::Parser;
 
 use cli::cli_util::{error_with_ack, standard_cli_check};
 
+use ffmpeg::args::FfmpegQuality;
+
 #[derive(Parser)]
 pub struct PermutorCli {
     /// the encoder you wish to benchmark: [h264_nvenc, hevc_nvenc, etc]
     #[arg(short, long, value_name = "encoder_name", default_value = "encoder")]
     pub encoder: String,
-    /// target bitrate (in Mb/s) to output; in combination with --bitrate-max-permutation, this is the starting permutation
-    #[arg(short, long, value_name = "bitrate", default_value = "10")]
-    pub bitrate: u32,
+    /// target bitrate (in Mb/s) to output; in combination with --max-bitrate-permutation, this is the starting permutation
+    #[arg(short, long, value_name = "bitrate")]
+    pub bitrate: Option<u32>,
+    /// target quality (in 0..51 range, smaller is better) to output; in combination with --max-quality-permutation, this is the starting permutation
+    #[arg(short, long, value_name = "quality")]
+    pub quality: Option<u32>,
     /// whether to run vmaf score on each permutation or not
     #[arg(short, long)]
     pub check_quality: bool,
@@ -34,9 +39,12 @@ pub struct PermutorCli {
     /// adds in '-pix_fmt yuv420p10le' to force 10-bit encoding
     #[arg(long)]
     pub ten_bit: bool,
-    /// maximum value to increase the bitrate to (in 5Mb/s intervals); if not specified, tool will not permute over bitrate values
-    #[arg(short, long, value_name = "bitrate")]
-    pub max_bitrate_permutation: Option<u32>,
+    /// maximum value to increase the bitrate or quality to. If not specified, tool will not permute over bitrate values
+    #[arg(short, long, value_name = "bitrate/quality")]
+    pub max_quality_permutation: Option<u32>,
+    /// bitrate or quality interval to increase the bitrate or quality by. (Default is 5Mb/s or 4 CQ intervals); only used if max_quality_permutation is specified
+    #[arg(short, long, value_name = "bitrate/quality interval")]
+    pub interval_quality_permutation: Option<u32>,
     /// logs useful information to help troubleshooting
     #[arg(short, long)]
     pub verbose: bool,
@@ -66,8 +74,32 @@ impl PermutorCli {
             error_with_ack(false);
         }
 
-        if self.max_bitrate_permutation.is_none() {
-            self.max_bitrate_permutation = Option::from(self.bitrate);
+        if self.bitrate.is_none() && self.quality.is_none() {
+            println!("Error: Neither constant bitrate or quality was provided, please specified one of the two");
+            error_with_ack(false);
+        }
+
+        if !self.bitrate.is_none() && !self.quality.is_none() {
+            println!("Error: Both constant bitrate and constant was provided, please specified one of the two");
+            error_with_ack(false);
+        }
+
+        if self.max_quality_permutation.is_none() {
+            self.max_quality_permutation = if !self.bitrate.is_none() {
+                Option::from(self.bitrate)
+            }
+            else {
+                Option::from(self.quality)
+            }
+        }
+        else {
+            if !self.bitrate.is_none() && self.fetch_quality_interval() == 0 {
+                println!("Error: Bitrate interval cannot be zero");
+                error_with_ack(false);
+            } else if !self.quality.is_none() && self.fetch_quality_interval() == 0 {
+                println!("Error: Quality interval cannot be zero");
+                error_with_ack(false);
+            }
         }
 
         if self.source_file.is_empty() && !self.files_directory.is_empty() {
@@ -82,5 +114,21 @@ impl PermutorCli {
             || self.verbose
             || self.test_run
             || self.allow_duplicate_scores;
+    }
+
+    pub fn fetch_quality_args(&self) -> FfmpegQuality {
+        if !self.bitrate.is_none() {
+            FfmpegQuality::ConstantBitrate(self.bitrate.unwrap())
+        }
+        else {
+            FfmpegQuality::ConstantQuality(self.quality.unwrap())
+        }
+    }
+
+    pub fn fetch_quality_interval(&self) -> i32 {
+        match self.fetch_quality_args() {
+            FfmpegQuality::ConstantBitrate(_) => self.interval_quality_permutation.unwrap_or(5) as i32,
+            FfmpegQuality::ConstantQuality(_) => -(self.interval_quality_permutation.unwrap_or(4) as i32), // quality increases as CQ decreases
+        }
     }
 }

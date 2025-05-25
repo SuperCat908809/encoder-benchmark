@@ -37,7 +37,7 @@ impl Nvenc {
 
     pub fn get_benchmark_settings(&self) -> String {
         return format!(
-            "-preset p1 -tune ll -profile:v {} -rc cbr -cbr true -gpu {}",
+            "-preset p1 -tune ll -profile:v {} -gpu {}",
             self.profiles.get(0).unwrap(),
             self.gpu
         );
@@ -75,15 +75,15 @@ impl NvencSettings {
         args.push_str(self.tune);
         args.push_str(" -profile:v ");
         args.push_str(self.profile);
-        args.push_str(" -rc ");
-        args.push_str(self.rate_control);
+        //args.push_str(" -rc ");
+        //args.push_str(self.rate_control);
         // user may have opted out of using b frames
         if self.no_b_frame {
             args.push_str(" -b_ref_mode 0");
         }
 
         // always set this to constant bit rate to ensure reliable stream
-        args.push_str(" -cbr true");
+        //args.push_str(" -cbr true");
         args.push_str(" -gpu ");
         args.push_str(self.gpu.to_string().as_str());
 

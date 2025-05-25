@@ -6,6 +6,25 @@ use codecs::vendor::Vendor;
 pub static TCP_LISTEN: &str = "tcp://localhost:2000?listen&listen_timeout=3000&timeout=1000000";
 pub static NO_OUTPUT: &str = "-f null -";
 
+#[derive(Clone, PartialEq, Debug, Copy)]
+pub enum FfmpegQuality {
+    ConstantBitrate(u32),
+    ConstantQuality(u32),
+}
+
+impl Default for FfmpegQuality {
+    fn default() -> Self { FfmpegQuality::ConstantBitrate(0) }
+}
+
+impl std::fmt::Display for FfmpegQuality {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            FfmpegQuality::ConstantBitrate(bitrate) => write!(f, "-cbr true -rc cbr -b:v {}M", bitrate),
+            FfmpegQuality::ConstantQuality(quality) => write!(f, "-cbr false -rc vbr -cq {}", quality),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct FfmpegArgs {
     fps_limit: u32,
@@ -13,7 +32,8 @@ pub struct FfmpegArgs {
     send_progress: bool,
     pub first_input: String,
     second_input: String,
-    pub bitrate: u32,
+    //pub bitrate: u32,
+    pub quality: FfmpegQuality,
     pub encoder: String,
     pub encoder_args: String,
     pub output_args: String,
@@ -31,7 +51,8 @@ impl Default for FfmpegArgs {
             send_progress: true,
             first_input: String::new(),
             second_input: String::new(),
-            bitrate: u32::default(),
+            //bitrate: u32::default(),
+            quality: FfmpegQuality::default(),
             encoder: String::new(),
             encoder_args: String::new(),
             output_args: NO_OUTPUT.to_string(),
@@ -50,13 +71,14 @@ impl FfmpegArgs {
         first_input: String,
         encoder: String,
         encoder_args: &String,
-        current_bitrate: u32,
+        current_quality: FfmpegQuality,
         decode: bool,
         ten_bit: bool,
     ) -> FfmpegArgs {
         let ffmpeg_args = FfmpegArgs {
             first_input,
-            bitrate: current_bitrate,
+            //bitrate: current_bitrate,
+            quality: current_quality,
             encoder,
             encoder_args: encoder_args.to_string(),
             decode,
@@ -141,7 +163,8 @@ impl FfmpegArgs {
             } else {
                 append_encode_only_args(
                     &mut output,
-                    self.bitrate,
+                    //self.bitrate,
+                    self.quality.clone(),
                     &self.encoder,
                     &self.encoder_args,
                 );
@@ -192,13 +215,17 @@ impl FfmpegArgs {
 
 fn append_encode_only_args(
     arg_str: &mut String,
-    bitrate: u32,
+    //bitrate: u32,
+    quality: FfmpegQuality,
     encoder: &String,
     encoder_args: &String,
 ) {
-    arg_str.push_str([" -b:v", bitrate.to_string().as_str()].join(" ").as_str());
+    //arg_str.push_str([" -b:v", quality.to_string().as_str()].join(" ").as_str());
     // adding the rate amount to the end of the bitrate
-    arg_str.push('M');
+    //arg_str.push('M');
+
+    arg_str.push(' ');
+    arg_str.push_str(quality.to_string().as_str());
     arg_str.push_str([" -c:v", encoder.as_str()].join(" ").as_str());
     arg_str.push(' ');
     arg_str.push_str(encoder_args.as_str());
@@ -217,7 +244,8 @@ fn append_vmaf_only_args(arg_str: &mut String) {
 // TODO: get rid of this later
 pub struct Cli {
     pub encoder: String,
-    pub bitrate: u32,
+    //pub bitrate: u32,
+    pub quality: FfmpegQuality,
     pub check_quality: bool,
     pub detect_overload: bool,
     pub source_file: String,
@@ -230,11 +258,11 @@ pub struct Cli {
 
 #[cfg(test)]
 mod tests {
-    use crate::args::{Cli, FfmpegArgs, NO_OUTPUT, TCP_LISTEN};
+    use crate::args::{Cli, FfmpegArgs, FfmpegQuality, NO_OUTPUT, TCP_LISTEN};
 
     static INPUT_ONE: &str = "1080-60.y4m";
     static INPUT_TWO: &str = "1080-60-2.y4m";
-    static BITRATE: u32 = 6;
+    static QUALITY: FfmpegQuality = FfmpegQuality::ConstantBitrate(6);
     static FPS_LIMIT: u32 = 60;
     static ENCODER: &str = "h264_nvenc";
     static ENCODER_ARGS: &str =
@@ -248,7 +276,7 @@ mod tests {
         assert_eq!(args.fps_limit, 0);
         assert_eq!(args.send_progress, true);
         assert_eq!(args.report, false);
-        assert_eq!(args.bitrate, u32::default());
+        assert_eq!(args.quality, FfmpegQuality::default());
         assert_eq!(args.output_args, "-f null -");
         assert_eq!(args.is_vmaf, false);
         assert_eq!(args.stats_period, 0.5);
@@ -266,7 +294,7 @@ mod tests {
 
         assert_eq!(ffmpeg_args.first_input, INPUT_ONE);
         assert_eq!(ffmpeg_args.second_input, INPUT_TWO);
-        assert_eq!(ffmpeg_args.bitrate, BITRATE);
+        assert_eq!(ffmpeg_args.quality, QUALITY);
         assert_eq!(ffmpeg_args.encoder, ENCODER);
         assert_eq!(ffmpeg_args.encoder_args, ENCODER_ARGS);
     }
@@ -277,7 +305,7 @@ mod tests {
 
         assert_eq!(ffmpeg_args.first_input, INPUT_ONE);
         assert_eq!(ffmpeg_args.second_input, "");
-        assert_eq!(ffmpeg_args.bitrate, BITRATE);
+        assert_eq!(ffmpeg_args.quality, QUALITY);
         assert_eq!(ffmpeg_args.encoder, ENCODER);
         assert_eq!(ffmpeg_args.encoder_args, ENCODER_ARGS);
     }
@@ -321,7 +349,7 @@ mod tests {
     fn get_one_input_args() -> FfmpegArgs {
         let args = Cli {
             encoder: ENCODER.to_string(),
-            bitrate: BITRATE,
+            quality: QUALITY.clone(),
             check_quality: false,
             detect_overload: false,
             source_file: INPUT_ONE.to_string(),
@@ -336,7 +364,7 @@ mod tests {
             args.source_file,
             args.encoder,
             &ENCODER_ARGS.to_string(),
-            args.bitrate,
+            args.quality.clone(),
             false,
             false,
         );
