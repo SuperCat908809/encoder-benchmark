@@ -8,7 +8,7 @@ use crossbeam_channel::Receiver;
 use ctrlc::Error;
 
 use ffmpeg::args::FfmpegArgs;
-use ffmpeg::report_files::{extract_vmaf_score, get_latest_ffmpeg_report_file, read_last_line_at, find_and_extract_vmaf_score};
+use ffmpeg::report_files::{get_latest_ffmpeg_report_file, read_last_line_at, find_and_extract_vmaf_score};
 use permutation::permutation::Permutation;
 
 use crate::engine::{log_permutation_header, run_encode, spawn_ffmpeg_child};
