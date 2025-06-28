@@ -16,6 +16,54 @@ use crate::permutor_cli::PermutorCli;
 
 mod permutor_cli;
 
+enum Codecs {
+    AMF(codecs::amf::Amf),
+    APPLE(codecs::apple_silicon::Apple),
+    AV1QSV(codecs::av1_qsv::AV1QSV),
+    NVENC(codecs::nvenc::Nvenc),
+    QSV(codecs::qsv::QSV)
+}
+
+impl Iterator for Codecs {
+    type Item = (usize, String);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Codecs::AMF(amf) => amf.next(),
+            Codecs::APPLE(apple) => apple.next(),
+            Codecs::AV1QSV(av1_qsv) => av1_qsv.next(),
+            Codecs::NVENC(nvenc) => nvenc.next(),
+            Codecs::QSV(qsv) => qsv.next()
+        }
+    }
+}
+
+impl Permute for Codecs {
+    fn init(&mut self) -> &Vec<String> {
+        match self {
+            Codecs::AMF(amf) => amf.init(),
+            Codecs::APPLE(apple) => apple.init(),
+            Codecs::AV1QSV(av1_qsv) => av1_qsv.init(),
+            Codecs::NVENC(nvenc) => nvenc.init(),
+            Codecs::QSV(qsv) => qsv.init()
+        }
+    }
+
+    fn run_standard_only(&mut self) -> &Vec<String> {
+        match self {
+            Codecs::AMF(amf) => amf.run_standard_only(),
+            Codecs::APPLE(apple) => apple.run_standard_only(),
+            Codecs::AV1QSV(av1_qsv) => av1_qsv.run_standard_only(),
+            Codecs::NVENC(nvenc) => nvenc.run_standard_only(),
+            Codecs::QSV(qsv) => qsv.run_standard_only()
+        }
+    }
+
+    fn get_resolution_to_bitrate_map(_fps: u32) -> std::collections::HashMap<String, u32> {
+        todo!()
+    }
+}
+
 fn main() {
     log_cli_header(String::from("Permutation Tool"));
     let mut cli = PermutorCli::parse();
@@ -25,25 +73,67 @@ fn main() {
 
     let mut engine = PermutationEngine::new(cli.log_output_directory.clone());
     let vendor = get_vendor_for_codec(&cli.encoder.clone());
+    
+    let mut codec: Codecs;
+    match vendor {
+        Vendor::Nvidia => {
+            let nvenc = Nvenc::new(cli.encoder == "hevc_nvenc", cli.gpu, cli.no_b_frame);
+            codec = Codecs::NVENC(nvenc);
+            //build_nvenc_setting_permutations(&mut engine, &cli, bitrate);
+        }
+        Vendor::AMD => {
+            let amf = Amf::new(cli.encoder == "hevc_amf", cli.gpu);
+            codec = Codecs::AMF(amf);
+            //build_amf_setting_permutations(&mut engine, &cli, bitrate);
+        }
+        Vendor::IntelQSV => {
+            if cli.encoder.contains("av1") {
+                let intel_av1 = AV1QSV::new();
+                codec = Codecs::AV1QSV(intel_av1);
+                //build_intel_av1_permutations(&mut engine, &cli, bitrate);
+            } else {
+                let intel_i_gpu = QSV::new(cli.encoder == "hevc_qsv");
+                codec = Codecs::QSV(intel_i_gpu);
+                //build_intel_igpu_permutations(&mut engine, &cli, bitrate);
+            }
+        }
+        Vendor::Apple => {
+            // this can probably be simplified with a type
+            let h264 = cli.encoder.contains("h264");
+            let prores = cli.encoder.contains("prores");
+            let apple_silicon = Apple::new(h264, prores);
+            codec = Codecs::APPLE(apple_silicon);
+            //build_apple_silicon_h264_permutations(&mut engine, &cli, bitrate);
+        }
+        Vendor::Unknown => { panic!("Unknown"); }
+    }
+
     for bitrate in get_bitrate_permutations(cli.bitrate, cli.max_bitrate_permutation.unwrap()) {
-        match vendor {
-            Vendor::Nvidia => {
-                build_nvenc_setting_permutations(&mut engine, &cli, bitrate);
+
+        // initialize the permutations each time
+        codec.init();
+
+        while let Some((_encoder_index, settings)) = codec.next() {
+            let mut permutation = Permutation::new(cli.source_file.clone(), cli.encoder.clone());
+            permutation.video_file = cli.source_file.clone();
+            permutation.encoder_settings = settings;
+            permutation.bitrate = bitrate;
+            permutation.check_quality = cli.check_quality;
+            permutation.verbose = cli.verbose;
+            permutation.detect_overload = cli.detect_overload;
+            permutation.allow_duplicates = cli.allow_duplicate_scores;
+            permutation.verbose = cli.verbose;
+            permutation.ten_bit = cli.ten_bit;
+            engine.add(permutation);
+
+            // break out early here to just make 1 permutation
+            if cli.test_run {
+                break;
             }
-            Vendor::AMD => {
-                build_amf_setting_permutations(&mut engine, &cli, bitrate);
-            }
-            Vendor::IntelQSV => {
-                if cli.encoder.contains("av1") {
-                    build_intel_av1_permutations(&mut engine, &cli, bitrate);
-                } else {
-                    build_intel_igpu_permutations(&mut engine, &cli, bitrate);
-                }
-            }
-            Vendor::Apple => {
-                build_apple_silicon_h264_permutations(&mut engine, &cli, bitrate);
-            }
-            Vendor::Unknown => {}
+        }
+
+        if cli.test_run {
+            break;
         }
     }
 
@@ -71,144 +161,6 @@ fn log_special_arguments(cli: &PermutorCli) {
 
         if cli.test_run {
             println!("  -test run, will only run 1 permutation");
-        }
-    }
-}
-
-fn build_nvenc_setting_permutations(
-    engine: &mut PermutationEngine,
-    cli: &PermutorCli,
-    bitrate: u32,
-) {
-    let mut nvenc = Nvenc::new(cli.encoder == "hevc_nvenc", cli.gpu, cli.no_b_frame);
-
-    // initialize the permutations each time
-    nvenc.init();
-
-    while let Some((_encoder_index, settings)) = nvenc.next() {
-        let mut permutation = Permutation::new(cli.source_file.clone(), cli.encoder.clone());
-        permutation.video_file = cli.source_file.clone();
-        permutation.encoder_settings = settings;
-        permutation.bitrate = bitrate;
-        permutation.check_quality = cli.check_quality;
-        permutation.verbose = cli.verbose;
-        permutation.detect_overload = cli.detect_overload;
-        permutation.allow_duplicates = cli.allow_duplicate_scores;
-        permutation.verbose = cli.verbose;
-        permutation.ten_bit = cli.ten_bit;
-        engine.add(permutation);
-
-        // break out early here to just make 1 permutation
-        if cli.test_run {
-            break;
-        }
-    }
-}
-
-fn build_amf_setting_permutations(engine: &mut PermutationEngine, cli: &PermutorCli, bitrate: u32) {
-    let mut amf = Amf::new(cli.encoder == "hevc_amf", cli.gpu);
-
-    // initialize the permutations each time
-    amf.init();
-
-    while let Some((_encoder_index, settings)) = amf.next() {
-        let mut permutation = Permutation::new(cli.source_file.clone(), cli.encoder.clone());
-        permutation.video_file = cli.source_file.clone();
-        permutation.encoder_settings = settings;
-        permutation.bitrate = bitrate;
-        permutation.check_quality = cli.check_quality;
-        permutation.verbose = cli.verbose;
-        permutation.detect_overload = cli.detect_overload;
-        permutation.allow_duplicates = cli.allow_duplicate_scores;
-        permutation.ten_bit = cli.ten_bit;
-        engine.add(permutation);
-
-        // break out early here to just make 1 permutation
-        if cli.test_run {
-            break;
-        }
-    }
-}
-
-fn build_intel_av1_permutations(engine: &mut PermutationEngine, cli: &PermutorCli, bitrate: u32) {
-    let mut intel_av1 = AV1QSV::new();
-
-    // initialize the permutations each time
-    intel_av1.init();
-
-    while let Some((_encoder_index, settings)) = intel_av1.next() {
-        let mut permutation = Permutation::new(cli.source_file.clone(), cli.encoder.clone());
-        permutation.video_file = cli.source_file.clone();
-        permutation.encoder_settings = settings;
-        permutation.bitrate = bitrate;
-        permutation.check_quality = cli.check_quality;
-        permutation.verbose = cli.verbose;
-        permutation.detect_overload = cli.detect_overload;
-        permutation.allow_duplicates = cli.allow_duplicate_scores;
-        permutation.ten_bit = cli.ten_bit;
-        engine.add(permutation);
-
-        // break out early here to just make 1 permutation
-        if cli.test_run {
-            break;
-        }
-    }
-}
-
-fn build_intel_igpu_permutations(engine: &mut PermutationEngine, cli: &PermutorCli, bitrate: u32) {
-    let mut intel_i_gpu = QSV::new(cli.encoder == "hevc_qsv");
-
-    // initialize the permutations each time
-    intel_i_gpu.init();
-
-    while let Some((_encoder_index, settings)) = intel_i_gpu.next() {
-        let mut permutation = Permutation::new(cli.source_file.clone(), cli.encoder.clone());
-        permutation.video_file = cli.source_file.clone();
-        permutation.encoder_settings = settings;
-        permutation.bitrate = bitrate;
-        permutation.check_quality = cli.check_quality;
-        permutation.verbose = cli.verbose;
-        permutation.detect_overload = cli.detect_overload;
-        permutation.allow_duplicates = cli.allow_duplicate_scores;
-        permutation.ten_bit = cli.ten_bit;
-        engine.add(permutation);
-
-        // break out early here to just make 1 permutation
-        if cli.test_run {
-            break;
-        }
-    }
-}
-
-// TODO: we'll probably need to do more of these per apple silicon one
-fn build_apple_silicon_h264_permutations(
-    engine: &mut PermutationEngine,
-    cli: &PermutorCli,
-    bitrate: u32,
-) {
-    // this can probably be simplified with a type
-    let h264 = cli.encoder.contains("h264");
-    let prores = cli.encoder.contains("prores");
-    let mut apple_silicon = Apple::new(h264, prores);
-
-    // initialize the permutations each time
-    apple_silicon.init();
-
-    while let Some((_encoder_index, settings)) = apple_silicon.next() {
-        let mut permutation = Permutation::new(cli.source_file.clone(), cli.encoder.clone());
-        permutation.video_file = cli.source_file.clone();
-        permutation.encoder_settings = settings;
-        permutation.bitrate = bitrate;
-        permutation.check_quality = cli.check_quality;
-        permutation.verbose = cli.verbose;
-        permutation.detect_overload = cli.detect_overload;
-        permutation.allow_duplicates = cli.allow_duplicate_scores;
-        permutation.ten_bit = cli.ten_bit;
-        engine.add(permutation);
-
-        // break out early here to just make 1 permutation
-        if cli.test_run {
-            break;
         }
     }
 }
