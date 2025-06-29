@@ -8,6 +8,7 @@ pub mod permute;
 pub mod qsv;
 mod resolutions;
 pub mod vendor;
+pub mod codecs;
 
 pub fn get_vendor_for_codec(codec: &String) -> Vendor {
     if codec.contains("nvenc") {
