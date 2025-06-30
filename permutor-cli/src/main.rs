@@ -1,3 +1,5 @@
+use core::panic;
+
 use clap::Parser;
 
 use cli::cli_util::log_cli_header;
@@ -11,6 +13,7 @@ use codecs::qsv::QSV;
 use codecs::vendor::Vendor;
 use codecs::codecs::Codecs;
 use engine::permutation_engine::PermutationEngine;
+use ffmpeg::args::FfmpegQuality;
 use permutation::permutation::Permutation;
 
 use crate::permutor_cli::PermutorCli;
@@ -27,10 +30,12 @@ fn main() {
     let mut engine = PermutationEngine::new(cli.log_output_directory.clone());
     let vendor = get_vendor_for_codec(&cli.encoder.clone());
     
+    let using_bitrate = true;
+
     let mut codec: Codecs;
     match vendor {
         Vendor::Nvidia => {
-            let nvenc = Nvenc::new(cli.encoder == "hevc_nvenc", cli.gpu, cli.no_b_frame);
+            let nvenc = Nvenc::new(cli.encoder == "hevc_nvenc", cli.gpu, cli.no_b_frame, using_bitrate);
             codec = Codecs::NVENC(nvenc);
             //build_nvenc_setting_permutations(&mut engine, &cli, bitrate);
         }
@@ -61,7 +66,9 @@ fn main() {
         Vendor::Unknown => { panic!("Unknown"); }
     }
 
-    for bitrate in get_bitrate_permutations(cli.bitrate, cli.max_bitrate_permutation.unwrap()) {
+    let min_quality = FfmpegQuality::Bitrate(cli.bitrate);
+    let max_quality = FfmpegQuality::Bitrate(cli.max_bitrate_permutation.unwrap());
+    for quality in get_quality_permutations(&min_quality, &max_quality) {
 
         // initialize the permutations each time
         codec.init();
@@ -70,7 +77,7 @@ fn main() {
             let mut permutation = Permutation::new(cli.source_file.clone(), cli.encoder.clone());
             permutation.video_file = cli.source_file.clone();
             permutation.encoder_settings = settings;
-            permutation.bitrate = bitrate;
+            permutation.ffmpeg_quality = quality;
             permutation.check_quality = cli.check_quality;
             permutation.verbose = cli.verbose;
             permutation.detect_overload = cli.detect_overload;
@@ -118,12 +125,30 @@ fn log_special_arguments(cli: &PermutorCli) {
     }
 }
 
-fn get_bitrate_permutations(starting_bitrate: u32, max_bitrate: u32) -> Vec<u32> {
-    let interval = 5;
-    let mut bitrates = Vec::new();
-    for i in 0..(((max_bitrate - starting_bitrate) / interval) + 1) {
-        bitrates.push(starting_bitrate + (interval * i));
+fn get_quality_permutations(min_quality: &FfmpegQuality, max_quality: &FfmpegQuality) -> Vec<FfmpegQuality> {
+    let mut qualities = Vec::new();
+
+    match min_quality {
+        FfmpegQuality::Bitrate(b_min) => {
+            let interval = 5;
+            let b_max = match max_quality { FfmpegQuality::Bitrate(b) => b, _ => panic!("max_bitrate doesn't match FfmpegQuality enum of starting_bitrate"), };
+            
+            for i in 0..(((b_max - b_min) / interval) + 1) {
+                let bitrate = b_min + (interval * i);
+                qualities.push(FfmpegQuality::Bitrate(bitrate));
+            }
+        },
+        FfmpegQuality::Quality(q_min) => {
+            let interval = 2;
+            let q_max = match max_quality { FfmpegQuality::Quality(q) => q, _ => panic!("max_bitrate doesn't match FfmpegQuality enum of starting_bitrate"), };
+            
+            // iterates from maximum quality value (lowest quality) to minimum quality value, i.e. 22 -> 18
+            for i in 0..(((q_max - q_min) / interval) + 1) {
+                let quality = q_min - (interval * i);
+                qualities.push(FfmpegQuality::Quality(quality));
+            }
+        }
     }
 
-    return bitrates;
+    return qualities;
 }

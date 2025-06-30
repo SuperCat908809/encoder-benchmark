@@ -16,31 +16,41 @@ pub struct Nvenc {
     permutations: Vec<String>,
     index: i32,
     gpu: u8,
+    using_bitrate: bool,
 }
 
 impl Nvenc {
-    pub fn new(is_hevc: bool, gpu: u8, no_b_frames: bool) -> Self {
+    pub fn new(is_hevc: bool, gpu: u8, no_b_frames: bool, using_bitrate: bool) -> Self {
         Self {
             presets: get_nvenc_presets(),
             tunes: get_nvenc_tunes(),
             // this is the only difference between hevc & h264
             profiles: if is_hevc { vec!["main"] } else { vec!["high"] },
             // leaving out vbr rate controls as these are not ideal for game streaming
-            rate_controls: vec!["cbr"],
+            rate_controls: if using_bitrate { vec!["cbr"] } else { vec!["vbr"] },
             no_b_frames,
             permutations: Vec::new(),
             // starts at -1, so that first next() will return the first element
             index: -1,
             gpu,
+            using_bitrate: using_bitrate,
         }
     }
 
     pub fn get_benchmark_settings(&self) -> String {
-        return format!(
-            "-preset p1 -tune ll -profile:v {} -rc cbr -cbr true -gpu {}",
-            self.profiles.get(0).unwrap(),
-            self.gpu
-        );
+        if self.using_bitrate {
+            return format!(
+                "-preset p1 -tune ll -profile:v {} -rc cbr -cbr true -gpu {}",
+                self.profiles.get(0).unwrap(),
+                self.gpu
+            );
+        } else {
+            return format!(
+                "-preset p1 -tune ll -profile:v {} -rc vbr -cbr false -gpu {}",
+                self.profiles.get(0).unwrap(),
+                self.gpu
+            );
+        }
     }
 
     fn has_next(&self) -> bool {
@@ -64,6 +74,7 @@ struct NvencSettings {
     rate_control: &'static str,
     no_b_frame: bool,
     gpu: u8,
+    using_bitrate: bool,
 }
 
 impl NvencSettings {
@@ -83,7 +94,13 @@ impl NvencSettings {
         }
 
         // always set this to constant bit rate to ensure reliable stream
-        args.push_str(" -cbr true");
+        if !self.using_bitrate {
+            args.push_str(" -cbr true");
+        }
+        else {
+            args.push_str(" -cbr false");            
+        }
+        
         args.push_str(" -gpu ");
         args.push_str(self.gpu.to_string().as_str());
 
@@ -140,6 +157,7 @@ impl Permute for Nvenc {
                 rate_control: unwrapped_perm.get(3).unwrap(),
                 no_b_frame: self.no_b_frames,
                 gpu: self.gpu,
+                using_bitrate: self.using_bitrate,
             };
 
             self.permutations.push(settings.to_string());
@@ -186,19 +204,19 @@ mod tests {
 
     #[test]
     fn create_h264_test() {
-        let nvenc = Nvenc::new(false, 0, false);
+        let nvenc = Nvenc::new(false, 0, false, false);
         assert!(nvenc.profiles.contains(&"high"));
     }
 
     #[test]
     fn create_hevc_test() {
-        let nvenc = Nvenc::new(true, 0, false);
+        let nvenc = Nvenc::new(true, 0, false, false);
         assert!(nvenc.profiles.contains(&"main"));
     }
 
     #[test]
     fn iterate_to_end_test() {
-        let mut nvenc = Nvenc::new(false, 0, false);
+        let mut nvenc = Nvenc::new(false, 0, false, false);
         let perm_count = nvenc.init().len();
 
         let mut total = 0;
@@ -212,20 +230,20 @@ mod tests {
 
     #[test]
     fn total_permutations_test() {
-        let mut nvenc = Nvenc::new(false, 0, false);
+        let mut nvenc = Nvenc::new(false, 0, false, false);
         assert_eq!(nvenc.init().len(), get_expected_len(&nvenc));
     }
 
     #[test]
     fn init_twice_not_double_test() {
-        let mut nvenc = Nvenc::new(false, 0, false);
+        let mut nvenc = Nvenc::new(false, 0, false, false);
         nvenc.init();
         assert_eq!(nvenc.init().len(), get_expected_len(&nvenc));
     }
 
     #[test]
     fn no_b_frame_test() {
-        let mut nvenc = Nvenc::new(false, 0, true);
+        let mut nvenc = Nvenc::new(false, 0, true, false);
         nvenc.init();
         assert_eq!(nvenc.no_b_frames, true);
     }

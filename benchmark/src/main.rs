@@ -64,7 +64,7 @@ fn benchmark() {
         let settings = get_benchmark_settings_for(&cli);
         let bitrate = get_bitrate_for(&permutation.get_metadata(), cli.encoder.clone());
 
-        permutation.bitrate = bitrate;
+        permutation.ffmpeg_quality = bitrate;
         permutation.encoder_settings = settings;
         permutation.verbose = cli.verbose;
 
