@@ -9,6 +9,8 @@ use ffmpeg::metadata::MetaData;
 
 use crate::fps_stats::FpsStats;
 
+use chrono::prelude::Utc;
+
 #[derive(Clone)]
 pub struct PermutationResult {
     pub encoder: String,
@@ -116,10 +118,11 @@ pub fn log_results_to_file(
     let first_metadata = results.get(0).unwrap().metadata;
     let encoder = results.get(0).unwrap().encoder.as_str();
     let permute_file_name = format!(
-        "{}-{}-{}.log",
+        "{}-{}-{} {}.log",
         encoder,
         first_metadata.get_res(),
-        first_metadata.fps
+        first_metadata.fps,
+        Utc::now().to_string().chars().take_while(|&ch| ch != '.').collect::<String>().replace(":", "-").replace(" ", "_") // datetime formatting
     )
     .to_string();
     let benchmark_file_name = format!("{}-benchmark.log", encoder).to_string();
