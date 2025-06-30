@@ -4,6 +4,7 @@ use std::io::Write;
 
 use compound_duration::format_dhms;
 
+use ffmpeg::args::FfmpegQuality;
 use ffmpeg::metadata::MetaData;
 
 use crate::fps_stats::FpsStats;
@@ -12,7 +13,7 @@ use crate::fps_stats::FpsStats;
 pub struct PermutationResult {
     pub encoder: String,
     pub was_overloaded: bool,
-    bitrate: u32,
+    ffmpeg_quality: FfmpegQuality,
     metadata: MetaData,
     pub encoder_settings: String,
     // only if the encodes were successful
@@ -26,7 +27,7 @@ pub struct PermutationResult {
 impl PermutationResult {
     pub fn new(
         metadata: &MetaData,
-        bitrate: u32,
+        ffmpeg_quality: FfmpegQuality,
         encoder_settings: &String,
         encoder: &str,
         decode: bool,
@@ -34,7 +35,7 @@ impl PermutationResult {
         Self {
             encoder: String::from(encoder),
             was_overloaded: false,
-            bitrate,
+            ffmpeg_quality,
             metadata: metadata.clone(),
             encoder_settings: encoder_settings.to_string(),
             encode_time: 0,
@@ -49,16 +50,24 @@ impl PermutationResult {
         let mut default = String::new();
 
         let overloaded_indicator = if self.was_overloaded { "[O]" } else { "   " };
-        default.push_str(
-            format!(
-                "{}{}x{}\t{}\t{}Mb/s",
-                overloaded_indicator,
-                self.metadata.width,
-                self.metadata.height,
-                self.metadata.fps,
-                self.bitrate
-            )
-            .as_str(),
+        default.push_str(match self.ffmpeg_quality {
+                FfmpegQuality::Bitrate(b) => format!(
+                    "{}{}x{}\t{}\t{}Mb/s",
+                    overloaded_indicator,
+                    self.metadata.width,
+                    self.metadata.height,
+                    self.metadata.fps,
+                    b.to_string()
+                ),
+                FfmpegQuality::Quality(q) => format!(
+                    "{}{}x{}\t{}\t{} CQ",
+                    overloaded_indicator,
+                    self.metadata.width,
+                    self.metadata.height,
+                    self.metadata.fps,
+                    q.to_string()
+                ),
+            }.as_str()
         );
 
         // adjust tabs based on expected vmaf score, or lack of one
@@ -99,7 +108,7 @@ pub fn log_results_to_file(
     results: Vec<PermutationResult>,
     runtime_str: &String,
     dup_results: Vec<PermutationResult>,
-    bitrate: u32,
+    ffmpeg_quality: FfmpegQuality,
     is_benchmark: bool,
     log_directory: &String,
 ) {
@@ -134,14 +143,17 @@ pub fn log_results_to_file(
         time = "[Encode/Decode Time]"
     }
 
-    writeln!(&mut w, "   [Resolution]\t[FPS]\t[Bitrate]\t{}\t[VMAF Time]\t[VMAF Score]\t[Average FPS]\t[1%'ile]\t[90%'ile]\t[Encoder Settings]", time).unwrap();
-    let mut current_bitrate = 0;
+    match ffmpeg_quality {
+        FfmpegQuality::Bitrate(_) => writeln!(&mut w, "   [Resolution]\t[FPS]\t[Bitrate]\t{}\t[VMAF Time]\t[VMAF Score]\t[Average FPS]\t[1%'ile]\t[90%'ile]\t[Encoder Settings]", time).unwrap(),
+        FfmpegQuality::Quality(_) => writeln!(&mut w, "   [Resolution]\t[FPS]\t[Quality]\t{}\t[VMAF Time]\t[VMAF Score]\t[Average FPS]\t[1%'ile]\t[90%'ile]\t[Encoder Settings]", time).unwrap(),
+    }
+    let mut current_quality = FfmpegQuality::Bitrate(0);
 
     for result in &results {
         // print a line split between bitrate permutations for improved readability
-        if !is_benchmark && current_bitrate != result.bitrate {
+        if !is_benchmark && current_quality != result.ffmpeg_quality {
             writeln!(&mut w, "##################################################################################################################################################################").unwrap();
-            current_bitrate = result.bitrate;
+            current_quality = result.ffmpeg_quality.clone();
         }
 
         writeln!(&mut w, "{}", result.to_string()).unwrap();
@@ -154,7 +166,7 @@ pub fn log_results_to_file(
     // log out the duplicated results so we can keep track of them
     let initial_perms: Vec<PermutationResult> = results
         .into_iter()
-        .filter(|res| res.bitrate == bitrate)
+        .filter(|res| res.ffmpeg_quality == ffmpeg_quality)
         .collect();
 
     // for each of these, collect the duplicates with the same score

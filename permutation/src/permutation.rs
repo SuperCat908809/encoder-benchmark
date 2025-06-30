@@ -1,3 +1,4 @@
+use ffmpeg::args::FfmpegQuality;
 use ffmpeg::ffprobe::probe_for_video_metadata;
 use ffmpeg::metadata::MetaData;
 
@@ -6,7 +7,7 @@ pub struct Permutation {
     pub video_file: String,
     pub encoder: String,
     pub encoder_settings: String,
-    pub bitrate: u32,
+    pub ffmpeg_quality: FfmpegQuality,
     pub metadata: MetaData,
     pub check_quality: bool,
     pub allow_duplicates: bool,
@@ -25,7 +26,7 @@ impl Permutation {
             video_file,
             encoder,
             encoder_settings: String::from(""),
-            bitrate: 0,
+            ffmpeg_quality: FfmpegQuality::Bitrate(0),
             metadata: MetaData::new(),
             check_quality: false,
             allow_duplicates: false,

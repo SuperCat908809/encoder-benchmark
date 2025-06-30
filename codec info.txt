@@ -1,0 +1,17 @@
+h264_nvenc, hevc_nvenc:
+	-rc vbr, constqp, vbr_hq
+	-cq
+	-spatial-aq, temporal-aq
+
+hevc_amf:
+	-rc cqp, qvbr, hqvbr
+	-qp_i, qp_p
+	h264_amf:
+		-qp_b
+
+h264_qsv, hevc_qsv:
+	-min_qp_i, min_qp_p, min_qp_b
+	-max_qp_i, max_qp_p, max_qp_b
+
+av1_qsv:
+	n/a

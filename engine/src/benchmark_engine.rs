@@ -44,7 +44,7 @@ impl BenchmarkEngine {
             self.results.clone(),
             &runtime_str,
             Vec::new(),
-            self.permutations[0].bitrate,
+            self.permutations[0].ffmpeg_quality,
             true,
             &self.log_files_directory,
         );
