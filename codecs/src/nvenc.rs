@@ -33,7 +33,7 @@ impl Nvenc {
             // starts at -1, so that first next() will return the first element
             index: -1,
             gpu,
-            using_bitrate: using_bitrate,
+            using_bitrate,
         }
     }
 
@@ -94,7 +94,7 @@ impl NvencSettings {
         }
 
         // always set this to constant bit rate to ensure reliable stream
-        if !self.using_bitrate {
+        if self.using_bitrate {
             args.push_str(" -cbr true");
         }
         else {
