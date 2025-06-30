@@ -1,6 +1,7 @@
 use clap::Parser;
 
 use cli::cli_util::{error_with_ack, standard_cli_check};
+use ffmpeg::args::FfmpegQuality;
 
 #[derive(Parser)]
 pub struct PermutorCli {
@@ -10,6 +11,9 @@ pub struct PermutorCli {
     /// target bitrate (in Mb/s) to output; in combination with --bitrate-max-permutation, this is the starting permutation
     #[arg(short, long, value_name = "bitrate", default_value = "10")]
     pub bitrate: u32,
+    /// target quality to output; in combination with --max-quality-permutation, this is the starting permutation
+    #[arg(short, long, value_name = "quality")]
+    pub quality: Option<u32>,
     /// whether to run vmaf score on each permutation or not
     #[arg(short, long)]
     pub check_quality: bool,
@@ -34,9 +38,9 @@ pub struct PermutorCli {
     /// adds in '-pix_fmt yuv420p10le' to force 10-bit encoding
     #[arg(long)]
     pub ten_bit: bool,
-    /// maximum value to increase the bitrate to (in 5Mb/s intervals); if not specified, tool will not permute over bitrate values
-    #[arg(short, long, value_name = "bitrate")]
-    pub max_bitrate_permutation: Option<u32>,
+    /// maximum value to increase the bitrate or quality to (in 5Mb/s or 2 CQ intervals); if not specified, tool will not permute over bitrate values
+    #[arg(short, long)]
+    pub max_quality_permutation: Option<u32>,
     /// logs useful information to help troubleshooting
     #[arg(short, long)]
     pub verbose: bool,
@@ -66,13 +70,31 @@ impl PermutorCli {
             error_with_ack(false);
         }
 
-        if self.max_bitrate_permutation.is_none() {
-            self.max_bitrate_permutation = Option::from(self.bitrate);
+        if self.max_quality_permutation.is_none() {
+            self.max_quality_permutation = Option::from(self.bitrate);
         }
 
         if self.source_file.is_empty() && !self.files_directory.is_empty() {
             // internally map the source_file and source_files_directory together
             self.source_file = format!("{}/{}", self.files_directory, self.source_file);
+        }
+    }
+
+    pub fn get_quality(&self) -> FfmpegQuality {
+        if self.quality.is_none() {
+            FfmpegQuality::Bitrate(self.bitrate)
+        }
+        else {
+            FfmpegQuality::Quality(self.quality.unwrap())
+        }
+    }
+
+    pub fn get_max_quality(&self) -> FfmpegQuality {
+        if self.quality.is_none() {
+            FfmpegQuality::Bitrate(self.max_quality_permutation.unwrap())
+        }
+        else {
+            FfmpegQuality::Quality(self.max_quality_permutation.unwrap())
         }
     }
 

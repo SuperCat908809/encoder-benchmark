@@ -2,6 +2,7 @@ use std::path::Path;
 use std::{env, panic};
 
 use clap::Parser;
+use ffmpeg::args::FfmpegQuality;
 use text_io::read;
 
 use cli::cli_util::{is_dev, log_cli_header, pause};
@@ -64,7 +65,7 @@ fn benchmark() {
         let settings = get_benchmark_settings_for(&cli);
         let bitrate = get_bitrate_for(&permutation.get_metadata(), cli.encoder.clone());
 
-        permutation.ffmpeg_quality = bitrate;
+        permutation.ffmpeg_quality = FfmpegQuality::Bitrate(bitrate);
         permutation.encoder_settings = settings;
         permutation.verbose = cli.verbose;
 
@@ -252,7 +253,7 @@ fn get_benchmark_settings_for(cli: &BenchmarkCli) -> String {
 
     return match vendor {
         Vendor::Nvidia => {
-            let nvenc = Nvenc::new(cli.encoder == "hevc_nvenc", cli.gpu, cli.no_b_frame);
+            let nvenc = Nvenc::new(cli.encoder == "hevc_nvenc", cli.gpu, cli.no_b_frame, false);
             nvenc.get_benchmark_settings()
         }
 
