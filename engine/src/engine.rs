@@ -145,7 +145,7 @@ fn log_header(
     println!("[FPS:\t\t{}]", metadata.fps);
     match permutation.ffmpeg_quality {
         FfmpegQuality::Bitrate(b) => println!("[Bitrate:\t{}Mb/s]", b),
-        FfmpegQuality::Quality(q) => println!("[Bitrate:\t{} CQ]", q),
+        FfmpegQuality::Quality(q) => println!("[Quality:\t{} CQ]", q),
     }
     println!("[{}]", permutation.encoder_settings);
 }

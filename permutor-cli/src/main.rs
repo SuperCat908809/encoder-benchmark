@@ -30,7 +30,9 @@ fn main() {
     let mut engine = PermutationEngine::new(cli.log_output_directory.clone());
     let vendor = get_vendor_for_codec(&cli.encoder.clone());
     
-    let using_bitrate = true;
+    let min_quality = cli.get_quality();
+    let max_quality = cli.get_max_quality();
+    let using_bitrate = match min_quality { FfmpegQuality::Bitrate(_) => true, _ => false, };
 
     let mut codec: Codecs;
     match vendor {
@@ -66,8 +68,6 @@ fn main() {
         Vendor::Unknown => { panic!("Unknown"); }
     }
 
-    let min_quality = FfmpegQuality::Bitrate(cli.bitrate);
-    let max_quality = FfmpegQuality::Bitrate(cli.max_bitrate_permutation.unwrap());
     for quality in get_quality_permutations(&min_quality, &max_quality) {
 
         // initialize the permutations each time
@@ -143,7 +143,7 @@ fn get_quality_permutations(min_quality: &FfmpegQuality, max_quality: &FfmpegQua
             let q_max = match max_quality { FfmpegQuality::Quality(q) => q, _ => panic!("max_bitrate doesn't match FfmpegQuality enum of starting_bitrate"), };
             
             // iterates from maximum quality value (lowest quality) to minimum quality value, i.e. 22 -> 18
-            for i in 0..(((q_max - q_min) / interval) + 1) {
+            for i in 0..(((q_min - q_max) / interval) + 1) {
                 let quality = q_min - (interval * i);
                 qualities.push(FfmpegQuality::Quality(quality));
             }
