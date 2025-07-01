@@ -24,6 +24,8 @@ pub struct PermutationResult {
     pub vmaf_score: c_float,
     pub fps_stats: FpsStats,
     pub decode_run: bool,
+    pub compression_ratio: f32,
+    pub average_bitrate: f32,
 }
 
 impl PermutationResult {
@@ -45,6 +47,8 @@ impl PermutationResult {
             vmaf_score: 0.0,
             fps_stats: FpsStats::default(),
             decode_run: decode,
+            compression_ratio: 0.0f32,
+            average_bitrate: 0.0f32,
         }
     }
 
@@ -54,24 +58,24 @@ impl PermutationResult {
         let overloaded_indicator = if self.was_overloaded { "[O]" } else { "   " };
         default.push_str(match self.ffmpeg_quality {
                 FfmpegQuality::Bitrate(b) => format!(
-                    "{}{}x{}\t{}\t{}Mb/s\t\t{}x\t{}Mb/s",
+                    "{}{}x{}\t{}\t{}Mb/s\t\t{:.2}x\t\t{:.2}Mb/s",
                     overloaded_indicator,
                     self.metadata.width,
                     self.metadata.height,
                     self.metadata.fps,
                     b.to_string(),
-                    1.0f32,
-                    4.0f32
+                    self.compression_ratio,
+                    self.average_bitrate
                 ),
                 FfmpegQuality::Quality(q) => format!(
-                    "{}{}x{}\t{}\t{} CQ\t\t{}x\t{}Mb/s",
+                    "{}{}x{}\t{}\t{} CQ\t\t{:.2}x\t\t{:.2}Mb/s",
                     overloaded_indicator,
                     self.metadata.width,
                     self.metadata.height,
                     self.metadata.fps,
                     q.to_string(),
-                    1.0f32,
-                    4.0f32
+                    self.compression_ratio,
+                    self.average_bitrate
                 ),
             }.as_str()
         );
@@ -94,7 +98,7 @@ impl PermutationResult {
 
         default.push_str(
             format!(
-                "\t\t{}\t\t{}\t\t{}{:.0}\t\t{}\t\t{}\t\t{}",
+                "\t{}\t\t{}\t\t{}{:.0}\t\t{}\t\t{}\t\t{}",
                 format_dhms(self.encode_time),
                 format_dhms(self.vmaf_calculation_time),
                 vmaf_score_str,
@@ -144,28 +148,28 @@ pub fn log_results_to_file(
     let mut w = File::create(file_name).unwrap();
 
     writeln!(&mut w, "Results from entire permutation:").unwrap();
-    writeln!(&mut w, "==============================================================================================================================================================================================================================").unwrap();
+    writeln!(&mut w, "========================================================================================================================================================================================================================================").unwrap();
     let mut time = "[Encode Time]";
     if results.len() > 1 && results[1].decode_run {
         time = "[Encode/Decode Time]"
     }
 
     match ffmpeg_quality {
-        FfmpegQuality::Bitrate(_) => writeln!(&mut w, "   [Resolution]\t[FPS]\t[Bitrate]\t[CR]\t[Avg. Bitrate]\t{}\t[VMAF Time]\t[VMAF Score]\t[Average FPS]\t[1%'ile]\t[90%'ile]\t[Encoder Settings]", time).unwrap(),
-        FfmpegQuality::Quality(_) => writeln!(&mut w, "   [Resolution]\t[FPS]\t[Quality]\t[CR]\t[Avg. Bitrate]\t{}\t[VMAF Time]\t[VMAF Score]\t[Average FPS]\t[1%'ile]\t[90%'ile]\t[Encoder Settings]", time).unwrap(),
+        FfmpegQuality::Bitrate(_) => writeln!(&mut w, "   [Resolution]\t[FPS]\t[Bitrate]\t[Comp. Ratio]\t[Avg. Bitrate]\t{}\t[VMAF Time]\t[VMAF Score]\t[Average FPS]\t[1%'ile]\t[90%'ile]\t[Encoder Settings]", time).unwrap(),
+        FfmpegQuality::Quality(_) => writeln!(&mut w, "   [Resolution]\t[FPS]\t[Quality]\t[Comp. Ratio]\t[Avg. Bitrate]\t{}\t[VMAF Time]\t[VMAF Score]\t[Average FPS]\t[1%'ile]\t[90%'ile]\t[Encoder Settings]", time).unwrap(),
     }
     let mut current_quality = FfmpegQuality::Bitrate(0);
 
     for result in &results {
         // print a line split between bitrate permutations for improved readability
         if !is_benchmark && current_quality != result.ffmpeg_quality {
-            writeln!(&mut w, "##############################################################################################################################################################################################################################").unwrap();
+            writeln!(&mut w, "########################################################################################################################################################################################################################################").unwrap();
             current_quality = result.ffmpeg_quality.clone();
         }
 
         writeln!(&mut w, "{}", result.to_string()).unwrap();
     }
-    writeln!(&mut w, "==============================================================================================================================================================================================================================").unwrap();
+    writeln!(&mut w, "========================================================================================================================================================================================================================================").unwrap();
     writeln!(&mut w, "Benchmark runtime: {}\n", runtime_str).unwrap();
 
     let mut has_logged_dup_header = false;
@@ -191,7 +195,7 @@ pub fn log_results_to_file(
 
         if !has_logged_dup_header {
             writeln!(&mut w, "Encoder settings that produced identical scores:").unwrap();
-            writeln!(&mut w, "==============================================================================================================================================================================================================================").unwrap();
+            writeln!(&mut w, "========================================================================================================================================================================================================================================").unwrap();
             has_logged_dup_header = true;
         }
 
@@ -205,5 +209,5 @@ pub fn log_results_to_file(
         writeln!(&mut w, "\n").unwrap();
     }
 
-    writeln!(&mut w, "==============================================================================================================================================================================================================================").unwrap();
+    writeln!(&mut w, "========================================================================================================================================================================================================================================").unwrap();
 }

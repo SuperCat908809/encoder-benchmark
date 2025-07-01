@@ -19,6 +19,23 @@ pub fn extract_vmaf_score(line: &str) -> Result<c_float, ParseFloatError> {
     return capture_group(line, r"VMAF score: (\d+\.\d+)").parse::<c_float>();
 }
 
+pub fn extract_frames_and_bytes(line: &str) -> Option<(u32, u32)> {
+    // frames and bytes will be on the same line
+    // if frames are found, find bytes, otherwise return error
+    
+    let frames = capture_group(line, r"(\d+) frames encoded").parse::<u32>();
+    if frames.is_err() {
+        return Option::None;
+    }
+
+    let bytes = capture_group(line, r"(\d+) bytes").parse::<u32>();
+    if bytes.is_err() {
+        return Option::None;
+    }
+
+    return Option::Some((frames.unwrap(), bytes.unwrap()));
+}
+
 pub fn read_last_line_at(line_number: i32) -> String {
     let log_file = File::open(get_latest_ffmpeg_report_file()).unwrap();
     let reader = RevBufReader::new(log_file);
@@ -49,6 +66,26 @@ pub fn find_and_extract_vmaf_score() -> Result<c_float, &'static str> {
 
     // if VMAF score could not be found, return error
     Err("Could not find VMAF score")
+}
+
+pub fn find_and_extract_frames_and_bytes() -> Result<(u32, u32), &'static str> {
+    let log_file = File::open(get_latest_ffmpeg_report_file()).unwrap();
+    let reader = RevBufReader::new(log_file);
+    let lines = reader.lines();
+
+    // read from bottom until VMAF score is found
+    for candidate_line in lines {
+        let unwrapped_line = candidate_line.unwrap();
+        let candidate_data = extract_frames_and_bytes(&unwrapped_line.as_str());
+
+        match candidate_data {
+            Some(data) => return Ok(data),
+            None => continue,
+        }
+    }
+
+    // if VMAF score could not be found, return error
+    Err("Could not frames and bytes from report file")
 }
 
 pub fn capture_group(str: &str, regex: &str) -> String {

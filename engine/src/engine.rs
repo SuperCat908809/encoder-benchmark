@@ -11,6 +11,7 @@ use ctrlc::Error;
 use cli::cli_util::error_with_ack;
 use ffmpeg::args::{FfmpegArgs, FfmpegQuality};
 use ffmpeg::metadata::MetaData;
+use ffmpeg::report_files::{get_latest_ffmpeg_report_file, find_and_extract_frames_and_bytes};
 use permutation::permutation::Permutation;
 
 use crate::progressbar;
@@ -40,6 +41,7 @@ pub fn run_encode(
         p.decode_run,
         p.ten_bit,
     );
+    ffmpeg_args.report = true;
 
     let encode_start_time = SystemTime::now();
 
@@ -70,13 +72,38 @@ pub fn run_encode(
     result.was_overloaded = trial_result.was_overloaded;
     result.encode_time = encode_start_time.elapsed().unwrap().as_secs();
 
+    
+    let encode_log_file = get_latest_ffmpeg_report_file();
+    let (_, bytes) = find_and_extract_frames_and_bytes().expect("Could not parse frames and bytes from ffmpeg encode log");
+    let src_metadata = fs::metadata(ffmpeg_args.first_input.clone()).expect("Could not read metadata from source file");    
+
+    let seconds = 30f32;
+    let bytes_to_megabytes = 1e6f32;
+    let bytes_to_bits = 8f32;
+
+    result.average_bitrate = (bytes as f32) / seconds / bytes_to_megabytes * bytes_to_bits;
+    result.compression_ratio = (src_metadata.len() as f32) / (bytes as f32);
+
+    // Cleanup encode log file
+    for _ in 0..3 {
+        match fs::remove_file(encode_log_file.as_path()) {
+            Ok(_) => break,
+            Err(_) => {
+                //println!("Waiting for ffmpeg to release encode log file");
+                sleep(Duration::from_millis(300));
+            }
+        }
+    }
+
+
     // calculate the fps statistics and store this in the result
     calculate_fps_statistics(&mut result, &mut trial_result);
 
     // log the calculated fps statistics; two spaces match the progress bar
     println!("  Average FPS:\t{:.0}", result.fps_stats.avg);
     println!("  1%'ile:\t{}", result.fps_stats.one_perc_low);
-    println!("  90%'ile:\t{}\n", result.fps_stats.ninety_perc);
+    println!("  90%'ile:\t{}", result.fps_stats.ninety_perc);
+    println!("  Avg. Bitrate:\t{:.2}Mb/s\n", result.average_bitrate);
 
     // delete the file we created to save on storage space
     if p.decode_run {

@@ -26,7 +26,7 @@ impl ToString for FfmpegQuality {
 #[derive(Clone)]
 pub struct FfmpegArgs {
     fps_limit: u32,
-    report: bool,
+    pub report: bool,
     send_progress: bool,
     pub first_input: String,
     second_input: String,
