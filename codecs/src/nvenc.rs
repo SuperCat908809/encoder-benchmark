@@ -38,19 +38,12 @@ impl Nvenc {
     }
 
     pub fn get_benchmark_settings(&self) -> String {
-        if self.using_bitrate {
-            return format!(
-                "-preset p1 -tune ll -profile:v {} -rc cbr -cbr true -gpu {}",
-                self.profiles.get(0).unwrap(),
-                self.gpu
-            );
-        } else {
-            return format!(
-                "-preset p1 -tune ll -profile:v {} -rc vbr -cbr false -gpu {}",
-                self.profiles.get(0).unwrap(),
-                self.gpu
-            );
-        }
+        return format!(
+            "-preset p1 -tune ll -profile:v {} {} -gpu {}",
+            self.profiles.get(0).unwrap(),
+            if self.using_bitrate { "-rc cbr -cbr true" } else { "-rc vbr -cbr false" },
+            self.gpu,
+        );
     }
 
     fn has_next(&self) -> bool {
@@ -93,13 +86,7 @@ impl NvencSettings {
             args.push_str(" -b_ref_mode 0");
         }
 
-        // always set this to constant bit rate to ensure reliable stream
-        if self.using_bitrate {
-            args.push_str(" -cbr true");
-        }
-        else {
-            args.push_str(" -cbr false");            
-        }
+        args.push_str(if self.using_bitrate {" -cbr true" } else { " -cbr false" } );
         
         args.push_str(" -gpu ");
         args.push_str(self.gpu.to_string().as_str());
