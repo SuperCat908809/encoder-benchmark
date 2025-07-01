@@ -8,10 +8,10 @@ pub struct PermutorCli {
     /// the encoder you wish to benchmark: [h264_nvenc, hevc_nvenc, etc]
     #[arg(short, long, value_name = "encoder_name", default_value = "encoder")]
     pub encoder: String,
-    /// target bitrate (in Mb/s) to output; in combination with --bitrate-max-permutation, this is the starting permutation
+    /// target bitrate (in Mb/s) to output; in combination with --max-quality-permutation, this is the starting permutation
     #[arg(short, long, value_name = "bitrate", default_value = "10")]
     pub bitrate: u32,
-    /// target quality to output; in combination with --max-quality-permutation, this is the starting permutation
+    /// target quality (CQ) to output; in combination with --max-quality-permutation, this is the starting permutation
     #[arg(short, long, value_name = "quality")]
     pub quality: Option<u32>,
     /// whether to run vmaf score on each permutation or not
