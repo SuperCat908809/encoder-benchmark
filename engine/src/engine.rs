@@ -41,7 +41,7 @@ pub fn run_encode(
         p.decode_run,
         p.ten_bit,
     );
-    ffmpeg_args.report = true;
+    ffmpeg_args.report = !p.is_decoding;
 
     let encode_start_time = SystemTime::now();
 
@@ -69,28 +69,31 @@ pub fn run_encode(
         error_with_ack(true);
     }
 
-    result.was_overloaded = trial_result.was_overloaded;
-    result.encode_time = encode_start_time.elapsed().unwrap().as_secs();
 
-    
-    let encode_log_file = get_latest_ffmpeg_report_file();
-    let (_, bytes) = find_and_extract_frames_and_bytes().expect("Could not parse frames and bytes from ffmpeg encode log");
-    let src_metadata = fs::metadata(ffmpeg_args.first_input.clone()).expect("Could not read metadata from source file");    
+    if !p.is_decoding {
+        result.was_overloaded = trial_result.was_overloaded;
+        result.encode_time = encode_start_time.elapsed().unwrap().as_secs();
 
-    let seconds = 30f32;
-    let bytes_to_megabytes = 1e6f32;
-    let bytes_to_bits = 8f32;
+        
+        let encode_log_file = get_latest_ffmpeg_report_file();
+        let (_, bytes) = find_and_extract_frames_and_bytes().expect("Could not parse frames and bytes from ffmpeg encode log");
+        let src_metadata = fs::metadata(ffmpeg_args.first_input.clone()).expect("Could not read metadata from source file");    
 
-    result.average_bitrate = (bytes as f32) / seconds / bytes_to_megabytes * bytes_to_bits;
-    result.compression_ratio = (src_metadata.len() as f32) / (bytes as f32);
+        let seconds = 30f32;
+        let bytes_to_megabytes = 1e6f32;
+        let bytes_to_bits = 8f32;
 
-    // Cleanup encode log file
-    for _ in 0..3 {
-        match fs::remove_file(encode_log_file.as_path()) {
-            Ok(_) => break,
-            Err(_) => {
-                //println!("Waiting for ffmpeg to release encode log file");
-                sleep(Duration::from_millis(300));
+        result.average_bitrate = (bytes as f32) / seconds / bytes_to_megabytes * bytes_to_bits;
+        result.compression_ratio = (src_metadata.len() as f32) / (bytes as f32);
+
+        // Cleanup encode log file, might need to wait for it to be released
+        for _ in 0..3 {
+            match fs::remove_file(encode_log_file.as_path()) {
+                Ok(_) => break,
+                Err(_) => {
+                    //println!("Waiting for ffmpeg to release encode log file");
+                    sleep(Duration::from_millis(300));
+                }
             }
         }
     }
@@ -103,7 +106,9 @@ pub fn run_encode(
     println!("  Average FPS:\t{:.0}", result.fps_stats.avg);
     println!("  1%'ile:\t{}", result.fps_stats.one_perc_low);
     println!("  90%'ile:\t{}", result.fps_stats.ninety_perc);
-    println!("  Avg. Bitrate:\t{:.2}Mb/s\n", result.average_bitrate);
+    if !p.is_decoding {
+        println!("  Avg. Bitrate:\t{:.2}Mb/s\n", result.average_bitrate);
+    }
 
     // delete the file we created to save on storage space
     if p.decode_run {
