@@ -11,7 +11,7 @@ use codecs::amf::Amf;
 use codecs::apple_silicon::Apple;
 use codecs::av1_qsv::AV1QSV;
 use codecs::get_vendor_for_codec;
-use codecs::nvenc::Nvenc;
+use codecs::nvenc::{Nvenc, NvencCodec};
 use codecs::permute::Permute;
 use codecs::qsv::QSV;
 use codecs::vendor::Vendor;
@@ -253,7 +253,13 @@ fn get_benchmark_settings_for(cli: &BenchmarkCli) -> String {
 
     return match vendor {
         Vendor::Nvidia => {
-            let nvenc = Nvenc::new(cli.encoder == "hevc_nvenc", cli.gpu, cli.no_b_frame, false);
+            let nvenc_codec = match cli.encoder.as_str() {
+                "h264_nvenc" => NvencCodec::H264,
+                "hevc_nvenc" => NvencCodec::HEVC,
+                "av1_nvenc"  => NvencCodec::AV1,
+                err_codec => panic!("unrecognised nvenc codec {}", err_codec),
+            };
+            let nvenc = Nvenc::new(nvenc_codec, cli.gpu, cli.no_b_frame, true);
             nvenc.get_benchmark_settings()
         }
 

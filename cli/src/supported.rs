@@ -1,6 +1,7 @@
-const SUPPORTED_ENCODERS: [&'static str; 10] = [
+const SUPPORTED_ENCODERS: [&'static str; 11] = [
     "h264_nvenc",
     "hevc_nvenc",
+    "av1_nvenc",
     "h264_amf",
     "hevc_amf",
     "h264_qsv",
@@ -26,7 +27,7 @@ pub fn is_encoder_supported(potential_encoder: &String) -> bool {
     return SUPPORTED_ENCODERS.contains(&potential_encoder.as_str());
 }
 
-pub fn get_supported_encoders() -> [&'static str; 10] {
+pub fn get_supported_encoders() -> [&'static str; 11] {
     return SUPPORTED_ENCODERS;
 }
 

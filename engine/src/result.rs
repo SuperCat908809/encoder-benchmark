@@ -98,7 +98,7 @@ impl PermutationResult {
 
         default.push_str(
             format!(
-                "\t{}\t\t{}\t\t{}{:.0}\t\t{}\t\t{}\t\t{}",
+                "\t{}\t\t\t{}\t\t{}{:.0}\t\t{}\t\t{}\t\t{}",
                 format_dhms(self.encode_time),
                 format_dhms(self.vmaf_calculation_time),
                 vmaf_score_str,
@@ -149,8 +149,9 @@ pub fn log_results_to_file(
 
     writeln!(&mut w, "Results from entire permutation:").unwrap();
     writeln!(&mut w, "========================================================================================================================================================================================================================================").unwrap();
-    let mut time = "[Encode Time]";
-    if results.len() > 1 && results[1].decode_run {
+    let mut time = "[Encode Time]\t";
+    let time_title_change = results.len() > 1 && results[1].decode_run;
+    if time_title_change {
         time = "[Encode/Decode Time]"
     }
 
